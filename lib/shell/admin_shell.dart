@@ -1,3 +1,5 @@
+﻿import '../screens/e_invoice_config_screen.dart';
+import '../modules/biometrics/biometrics_module.dart';
 import 'package:flutter/material.dart';
 import '../models/business_activity.dart';
 import '../models/user_session.dart';
@@ -1487,6 +1489,7 @@ class _AdminShellState extends State<AdminShell> {
             type: BottomNavigationBarType.fixed,
             items: const [
               BottomNavigationBarItem(icon: Icon(Icons.groups_rounded, size: 18), label: "Field Techs"),
+                BottomNavigationBarItem(icon: Icon(Icons.fingerprint_rounded, size: 18), label: "Attendance"),
               BottomNavigationBarItem(icon: Icon(Icons.airport_shuttle_rounded, size: 18), label: "Van Stock"),
               BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded, size: 18), label: "Procure & Logistics"),
               BottomNavigationBarItem(icon: Icon(Icons.tune_rounded, size: 18), label: "Config"),
@@ -1502,10 +1505,15 @@ class _AdminShellState extends State<AdminShell> {
       case 0:
         return _buildFieldTechsTab();
       case 1:
-        return _buildVanStockTab();
+        return const Padding(
+          padding: EdgeInsets.all(12),
+          child: AdminAttendanceLedgerView(),
+        );
       case 2:
-        return _buildProcurementAndWarrantyTab();
+        return _buildVanStockTab();
       case 3:
+        return _buildProcurementAndWarrantyTab();
+      case 4:
       default:
         return _buildConfigTab();
     }
@@ -2472,7 +2480,74 @@ _Generated via FieldOps Operations_
           ),
         ),
         const SizedBox(height: 20),
-      ],
+          const SizedBox(height: 16),
+          _configSectionTitle("4. E-INVOICING & STATUTORY TAX COMPLIANCE"),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0B132B),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF1E293B)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF10B981), size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "LHDN MyInvois / Statutory Gateways",
+                            style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            "TIN, SST, Client ID credentials & ERP integration",
+                            style: TextStyle(color: const Color(0xFF94A3B8), fontSize: 8),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 38,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.settings_suggest_rounded, size: 15),
+                    label: const Text("CONFIGURE E-INVOICE GATEWAY", style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900)),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => EInvoiceConfigScreen(session: widget.session),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
     );
   }
 

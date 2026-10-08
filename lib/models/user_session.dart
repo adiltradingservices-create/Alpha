@@ -1,4 +1,4 @@
-﻿class UserSession {
+class UserSession {
   final String id;
   final String token;
   final String name;

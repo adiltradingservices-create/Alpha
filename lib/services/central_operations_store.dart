@@ -1,9 +1,110 @@
-﻿import 'package:flutter/material.dart';
+import '../models/e_invoice_config.dart';
+import '../models/tenant_subscription.dart';
+import 'package:flutter/material.dart';
 import 'data_engine_hub.dart';
 
 typedef TechnicianEntity = TechnicianRecord;
 
 class CentralOperationsStore extends ChangeNotifier {
+  late TenantEInvoiceConfig _eInvoiceConfig = TenantEInvoiceConfig(
+    tenantId: 'TENANT-DEFAULT',
+    countryCode: 'MY',
+  );
+
+  TenantEInvoiceConfig get eInvoiceConfig => _eInvoiceConfig;
+
+  void bindTenantEInvoice(String tenantId, String countryCode) {
+    _eInvoiceConfig = TenantEInvoiceConfig(
+      tenantId: tenantId,
+      countryCode: countryCode,
+    );
+    notifyListeners();
+  }
+
+  // Centralized Global SaaS Client Subscriptions
+  final List<TenantSubscription> _clients = [
+    TenantSubscription(
+      tenantId: 'TENANT-MY-01',
+      companyName: 'IDSB Infrastructure Sdn Bhd',
+      countryCode: 'MY',
+      currency: 'MYR',
+      contactEmail: 'ops@idsb.com.my',
+      tier: SubscriptionTier.enterpriseCustom,
+      validUntil: DateTime(2027, 12, 31),
+      enableBiometrics: true,
+      enableVanStores: true,
+      enableTestingCommissioning: true,
+      enableClientEndorsement: true,
+      enableCloudSync: true,
+    ),
+    TenantSubscription(
+      tenantId: 'TENANT-PK-02',
+      companyName: 'InfraTech Surveillance Ltd',
+      countryCode: 'PK',
+      currency: 'PKR',
+      contactEmail: 'admin@infratech.pk',
+      tier: SubscriptionTier.professional,
+      validUntil: DateTime(2027, 6, 30),
+      enableBiometrics: true,
+      enableVanStores: true,
+      enableTestingCommissioning: true,
+      enableClientEndorsement: true,
+      enableCloudSync: false,
+    ),
+    TenantSubscription(
+      tenantId: 'TENANT-SG-03',
+      companyName: 'Apex Smart Grid Pte Ltd',
+      countryCode: 'SG',
+      currency: 'SGD',
+      contactEmail: 'corp@apexgrid.sg',
+      tier: SubscriptionTier.starter,
+      validUntil: DateTime(2026, 11, 15),
+      enableBiometrics: false,
+      enableVanStores: true,
+      enableTestingCommissioning: true,
+      enableClientEndorsement: false,
+      enableCloudSync: false,
+    ),
+  ];
+
+  List<TenantSubscription> get clients => List.unmodifiable(_clients);
+
+  void updateTenantSubscription(TenantSubscription updated) {
+    final idx = _clients.indexWhere((c) => c.tenantId == updated.tenantId);
+    if (idx != -1) {
+      _clients[idx] = updated;
+      if (companyName == updated.companyName || companyName.isEmpty) {
+        updateConfig(
+          name: updated.companyName,
+          biometrics: updated.enableBiometrics,
+          vanStores: updated.enableVanStores,
+          testing: updated.enableTestingCommissioning,
+          signOff: updated.enableClientEndorsement,
+        );
+      }
+      notifyListeners();
+    }
+  }
+
+  void provisionTenant(TenantSubscription newTenant) {
+    _clients.insert(0, newTenant);
+    notifyListeners();
+  }
+
+  void updateTenantModules(String tenantId, String moduleId, bool value) {
+    final tenant = _clients.firstWhere((c) => c.tenantId == tenantId, orElse: () => _clients.first);
+    tenant.toggleModule(moduleId, value);
+    if (tenant.companyName == companyName) {
+      updateConfig(
+        biometrics: tenant.enableBiometrics,
+        vanStores: tenant.enableVanStores,
+        testing: tenant.enableTestingCommissioning,
+        signOff: tenant.enableClientEndorsement,
+      );
+    }
+    notifyListeners();
+  }
+
   static final CentralOperationsStore _instance = CentralOperationsStore._internal();
   factory CentralOperationsStore() => _instance;
   CentralOperationsStore._internal() {

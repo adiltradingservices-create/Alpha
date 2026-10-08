@@ -1,4 +1,5 @@
-﻿import 'dart:async';
+﻿import '../models/van_fleet_record.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -508,11 +509,106 @@ class DataEngineHub extends ChangeNotifier {
   bool enableSignOff = true;
   bool enableWhatsApp = true;
 
+  final List<VanFleetRecord> _vans = [];
+  List<VanFleetRecord> get vans => List.unmodifiable(_vans);
+
+  void registerVan(VanFleetRecord van) {
+    _vans.removeWhere((v) => v.plateNumber == van.plateNumber || v.id == van.id);
+    _vans.add(van);
+    _syncTechniciansWithVan(van);
+    notifyListeners();
+  }
+
+  void updateVan(VanFleetRecord updatedVan) {
+    final idx = _vans.indexWhere((v) => v.id == updatedVan.id);
+    if (idx != -1) {
+      _vans[idx] = updatedVan;
+      _syncTechniciansWithVan(updatedVan);
+      notifyListeners();
+    }
+  }
+
+  void _syncTechniciansWithVan(VanFleetRecord van) {
+    for (final tech in _technicians) {
+      if (van.assignedTechnicianIds.contains(tech.id)) {
+        tech.vehiclePlate = van.plateNumber;
+      } else if (tech.vehiclePlate == van.plateNumber) {
+        tech.vehiclePlate = "UNASSIGNED";
+      }
+    }
+  }
+
   final List<TechnicianRecord> _technicians = [];
   List<TechnicianRecord> get technicians => List.unmodifiable(_technicians);
 
   final List<VanStockItem> _vanStockItems = [];
   List<VanStockItem> get vanStockItems => List.unmodifiable(_vanStockItems);
+
+    // Auto-deduct stock used during site installation or checklist execution
+  bool deductStockForJobInstallation({
+    required String vanPlate,
+    required String sku,
+    required int quantityUsed,
+    required String jobId,
+  }) {
+    final idx = _vanStockItems.indexWhere((i) => i.sku == sku && i.assignedVanPlate == vanPlate);
+    if (idx != -1) {
+      final available = _vanStockItems[idx].quantity;
+      final deducted = (available - quantityUsed).clamp(0, 99999);
+      _vanStockItems[idx].quantity = deducted;
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  // Pre-formatted Restock Dispatch Manifest / PDF printable summary text
+  String generateVanDispatchManifestText(VanFleetRecord van, String countryCode) {
+    final assigned = _technicians.where((t) => van.assignedTechnicianIds.contains(t.id)).map((t) => t.name).join(', ');
+    final items = _vanStockItems.where((i) => i.assignedVanPlate == van.plateNumber).toList();
+    final inspectionLabel = countryCode == 'MY'
+        ? 'Puspakom Commercial Cert'
+        : (countryCode == 'PK' ? 'MTA Fitness Certificate' : 'Safety Inspection');
+    final taxLabel = countryCode == 'MY'
+        ? 'JPJ Commercial Road Tax'
+        : (countryCode == 'PK' ? 'Token Tax Excise' : 'Road Tax / MOT');
+
+    final buffer = StringBuffer();
+    buffer.writeln('====================================================');
+    buffer.writeln('    OPERATIONAL FLEET VAN DISPATCH MANIFEST');
+    buffer.writeln('====================================================');
+    buffer.writeln('Van Plate: ${van.plateNumber} \vert{} Model:${van.model}');
+    buffer.writeln('Depot: ${van.depotLocation} \vert{} Status:${van.status.name.toUpperCase()}');
+    buffer.writeln('Assigned Crew: ${assigned.isEmpty ? "No crew assigned" : assigned}');
+    buffer.writeln('Odometer: ${van.currentMileageKm} KM \vert{} Next Service:${van.nextServiceMileageKm} KM');
+    buffer.writeln('$taxLabel:${van.roadTaxExpiry.day}/${van.roadTaxExpiry.month}/${van.roadTaxExpiry.year}');
+    buffer.writeln('$inspectionLabel:${van.commercialInspectionExpiry.day}/${van.commercialInspectionExpiry.month}/${van.commercialInspectionExpiry.year}');
+    buffer.writeln('----------------------------------------------------');
+    buffer.writeln('ONBOARD INVENTORY ROSTER:');
+    for (final item in items) {
+      buffer.writeln(' - [${item.sku}]${item.name}: ${item.quantity}${item.uom}');
+    }
+    buffer.writeln('----------------------------------------------------');
+    buffer.writeln('DURABLE TOOLS & TEST EQUIPMENT:');
+    for (final tool in van.durableTools) {
+      final holder = tool.checkedOutByTechId != null ? " [OUT: ${tool.checkedOutByTechId}]" : " [IN VAN]";
+      buffer.writeln(' - [S/N: ${tool.serialNumber}] ${tool.name}$holder');
+    }
+    buffer.writeln('====================================================');
+    buffer.writeln('Driver Sign-off: ________________  Date: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}');
+    return buffer.toString();
+  }
+
+  void adjustStockQuantity(String sku, String vanPlate, int delta) {
+    final idx = _vanStockItems.indexWhere((i) => i.sku == sku && i.assignedVanPlate == vanPlate);
+    if (idx != -1) {
+      final current = _vanStockItems[idx].quantity;
+      final updated = (current + delta).clamp(0, 99999);
+      _vanStockItems[idx].quantity = updated;
+      // In-memory synced state
+      notifyListeners();
+    }
+  }
 
   final List<VendorEntity> _vendors = [];
   List<VendorEntity> get vendors => List.unmodifiable(_vendors);
@@ -522,6 +618,18 @@ class DataEngineHub extends ChangeNotifier {
 
   final List<AssetWarrantyRecord> _warrantyAssets = [];
   List<AssetWarrantyRecord> get warrantyAssets => List.unmodifiable(_warrantyAssets);
+
+  List<AssetWarrantyRecord> get criticalWarrantyAlerts => _warrantyAssets
+      .where((a) => !a.isExpired && a.daysRemaining <= 30 && a.daysRemaining >= 0)
+      .toList();
+
+  List<AssetWarrantyRecord> get upcomingWarrantyAlerts => _warrantyAssets
+      .where((a) => !a.isExpired && a.daysRemaining > 30 && a.daysRemaining <= 90)
+      .toList();
+
+  List<AssetWarrantyRecord> get expiredWarrantyAssets => _warrantyAssets
+      .where((a) => a.isExpired || a.daysRemaining < 0)
+      .toList();
 
   final List<VanTransferDocket> _transferDockets = [];
   List<VanTransferDocket> get transferDockets => List.unmodifiable(_transferDockets);
@@ -573,6 +681,7 @@ class DataEngineHub extends ChangeNotifier {
       }
     } else {
       _seedDefaultTenantTechs(tenantId);
+        _seedDefaultVans(tenantId);
       needsPersistTech = true;
     }
 
@@ -649,6 +758,36 @@ class DataEngineHub extends ChangeNotifier {
       if (needsPersistAssets) _persistWarrantyAssets();
       if (needsPersistTransfers) _persistTransferDockets();
     });
+  }
+
+  void _seedDefaultVans(String tenantId) {
+    final isPk = tenantId.contains('PK');
+    _vans.clear();
+    final defaultPlate = isPk ? 'ICT-LE-401' : 'WVG 8812';
+    final secondaryPlate = isPk ? 'LHR-7721' : 'BND 4490';
+
+    final techIds = _technicians.map((t) => t.id).toList();
+
+    _vans.addAll([
+      VanFleetRecord(
+        id: "VAN-001",
+        tenantId: tenantId,
+        plateNumber: defaultPlate,
+        model: "Toyota HiAce 2.5D High Roof",
+        depotLocation: "Central Klang Valley Hub",
+        status: VanOperationalStatus.active,
+        assignedTechnicianIds: techIds.take(2).toList(),
+      ),
+      VanFleetRecord(
+        id: "VAN-002",
+        tenantId: tenantId,
+        plateNumber: secondaryPlate,
+        model: "Nissan NV200 Panel Van",
+        depotLocation: "Subang Logistics Yard",
+        status: VanOperationalStatus.active,
+        assignedTechnicianIds: techIds.skip(2).take(1).toList(),
+      ),
+    ]);
   }
 
   void _seedDefaultTenantTechs(String tenantId) {
@@ -1198,6 +1337,14 @@ class DataEngineHub extends ChangeNotifier {
     if (changed) {
       _persistVanStock();
       _broadcastEvent(SyncEventType.inventoryAdjusted, {'consumed': materials});
+      notifyListeners();
+    }
+  }
+
+  void updateTechnician(TechnicianRecord updatedTech) {
+    final idx = _technicians.indexWhere((t) => t.id == updatedTech.id);
+    if (idx != -1) {
+      _technicians[idx] = updatedTech;
       notifyListeners();
     }
   }

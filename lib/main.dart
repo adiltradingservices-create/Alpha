@@ -60,8 +60,19 @@ class AppRootRouter extends StatefulWidget {
 }
 
 class _AppRootRouterState extends State<AppRootRouter> {
-  UserSession? _currentSession;
-
+  UserSession? _currentSession = const UserSession(
+    id: 'TENANT-ADMIN-DEMO',
+    token: 'TOKEN-ADMIN-DEMO',
+    name: 'Adil Javed (HQ Admin)',
+    email: 'admin@fieldops.io',
+    role: 'ADMIN',
+    tenantId: 'TENANT-MY-001',
+    companyName: 'Adil Trading Services',
+    planTier: 'ENTERPRISE',
+    countryCode: 'MY',
+    currencySymbol: 'RM ',
+  );
+  
   @override
   Widget build(BuildContext context) {
     if (_currentSession == null) {
@@ -103,154 +114,145 @@ class _RoleSelectionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final store = CentralOperationsStore();
+
     return Scaffold(
       backgroundColor: const Color(0xFF030712),
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+        child: AnimatedBuilder(
+          animation: store,
+          builder: (context, _) {
+            final clients = store.clients;
+
+            return ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF10B981), Color(0xFF0284C7)],
+                const SizedBox(height: 12),
+                Center(
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                      border: Border.all(color: const Color(0xFF10B981), width: 1.5),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                        blurRadius: 20,
-                        spreadRadius: 2,
-                      ),
-                    ],
+                    child: const Icon(Icons.bolt_rounded, color: Color(0xFF10B981), size: 36),
                   ),
-                  child: const Icon(Icons.bolt_rounded, size: 36, color: Colors.black),
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  "FIELDOPS ENTERPRISE",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
+                const SizedBox(height: 14),
+                const Center(
+                  child: Text(
+                    "FIELDOPS ENTERPRISE",
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1.2),
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  "Malaysia 🇲🇾 • Pakistan 🇵🇰 • Global 🌐",
-                  style: TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.bold),
+                const Center(
+                  child: Text(
+                    "Modular Global SaaS ERP Platform",
+                    style: TextStyle(color: Color(0xFF64748B), fontSize: 9, fontWeight: FontWeight.w600),
+                  ),
                 ),
                 const SizedBox(height: 28),
 
-                // 1. Super Admin Role
+                // 1. Root Super Admin Access
                 _portalCard(
                   title: "SUPER ADMIN PLATFORM ROOT",
                   subtitle: "Global Multi-Tenant Governance & Licensing",
                   badge: "ROOT ACCESS",
-                  color: const Color(0xFFA855F7),
-                  icon: Icons.public_rounded,
+                  badgeColor: const Color(0xFF818CF8),
+                  icon: Icons.shield_rounded,
+                  iconBg: const Color(0xFF312E81),
                   onTap: () {
-                    onSelectSession(const UserSession(
-                      id: 'usr_super_01',
-                      token: 'jwt_root_token',
-                      name: 'Global Platform Admin',
-                      email: 'root@fieldops.io',
-                      role: 'SUPER_ADMIN',
-                      tenantId: 'system_root',
-                      companyName: 'FieldOps Cloud Infrastructure',
-                      planTier: 'PLATFORM_OWNER',
-                      countryCode: 'GLOBAL',
-                      currencySymbol: 'USD',
-                      regulatoryBody: 'ISO 27001 / SOC 2',
-                      taxEngine: 'Global Multi-Engine',
-                    ));
+                    onSelectSession(
+                      const UserSession(
+                        id: 'ROOT-SUPER-ADMIN',
+                        token: 'SUPER-TOKEN-001',
+                        name: 'Global Platform Director',
+                        email: 'root@fieldops.io',
+                        role: 'SUPER_ADMIN',
+                        tenantId: 'PLATFORM-ROOT',
+                        companyName: 'FieldOps Global Cloud',
+                        planTier: 'ENTERPRISE_ROOT',
+                      ),
+                    );
                   },
                 ),
                 const SizedBox(height: 12),
 
-                // 2. Malaysia Tenant Admin
-                _portalCard(
-                  title: "TENANT COMMAND: MALAYSIA 🇲🇾",
-                  subtitle: "AlphaTech Networks • CIDB G7 & ST (PW4) • RM",
-                  badge: "COMPANY ADMIN",
-                  color: const Color(0xFF10B981),
-                  icon: Icons.admin_panel_settings_rounded,
-                  onTap: () {
-                    onSelectSession(const UserSession(
-                      id: 'usr_director_my',
-                      token: 'jwt_admin_my',
-                      name: 'Ir. Hazwan Bin Roslan',
-                      email: 'director@alphatec.my',
-                      role: 'ADMIN',
-                      tenantId: 'tenant_alphatec_01',
-                      companyName: 'AlphaTech Networks Sdn Bhd',
-                      planTier: 'ENTERPRISE SUITE',
-                      countryCode: 'MY',
-                      currencySymbol: 'RM',
-                      regulatoryBody: 'CIDB G7 & ST',
-                      taxEngine: 'LHDN MyInvois (SST 8%)',
-                    ));
-                  },
-                ),
-                const SizedBox(height: 12),
+                // 2. Dynamic Client Tenant Cards from CentralOperationsStore
+                ...clients.map((c) {
+                  final isPk = c.countryCode == 'PK';
+                  final isSg = c.countryCode == 'SG';
 
-                // 3. Pakistan Tenant Admin
-                _portalCard(
-                  title: "TENANT COMMAND: PAKISTAN 🇵🇰",
-                  subtitle: "Lahore Smart Surveillance • PEC C-3 (EE02/EE06) • PKR ₨",
-                  badge: "COMPANY ADMIN",
-                  color: const Color(0xFF38BDF8),
-                  icon: Icons.business_rounded,
-                  onTap: () {
-                    onSelectSession(const UserSession(
-                      id: 'usr_director_pk',
-                      token: 'jwt_admin_pk',
-                      name: 'Engr. M. Usman Tariq',
-                      email: 'director@safecity.pk',
-                      role: 'ADMIN',
-                      tenantId: 'tenant_lahore_cctv_02',
-                      companyName: 'Lahore Smart Surveillance & Infra Ltd',
-                      planTier: 'ENTERPRISE SUITE',
-                      countryCode: 'PK',
-                      currencySymbol: 'PKR ₨',
-                      regulatoryBody: 'PEC & NEPRA (EE02/EE06)',
-                      taxEngine: 'FBR Digital Invoicing (PRA/SRB)',
-                    ));
-                  },
-                ),
-                const SizedBox(height: 12),
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _portalCard(
+                      title: "TENANT COMMAND: [${c.countryCode}] ${c.companyName}",
+                      subtitle: "Reg: ${isPk ? 'PEC & NEPRA' : (isSg ? 'BCA & EMA' : 'CIDB & ST')} � Currency: ${c.currency}",
+                      badge: c.tier.name.toUpperCase().replaceAll('_', ' '),
+                      badgeColor: const Color(0xFF10B981),
+                      icon: Icons.apartment_rounded,
+                      iconBg: const Color(0xFF064E3B),
+                      onTap: () {
+                        store.updateConfig(
+                          name: c.companyName,
+                          biometrics: c.enableBiometrics,
+                          vanStores: c.enableVanStores,
+                          testing: c.enableTestingCommissioning,
+                          signOff: c.enableClientEndorsement,
+                        );
 
-                // 4. Technician Shell
+                        onSelectSession(
+                          UserSession(
+                            id: "TENANT-ADMIN-${c.tenantId}",
+                            token: "TOKEN-${c.tenantId}",
+                            name: "${c.companyName} Admin",
+                            email: c.contactEmail,
+                            role: 'ADMIN',
+                            tenantId: c.tenantId,
+                            companyName: c.companyName,
+                            planTier: c.tier.name.toUpperCase(),
+                            countryCode: c.countryCode,
+                            currencySymbol: isPk ? 'PKR ' : (isSg ? 'SGD' : 'RM'),
+                            regulatoryBody: isPk ? 'PEC & NEPRA' : (isSg ? 'BCA / EMA' : 'CIDB & ST'),
+                            taxEngine: isPk ? 'FBR Digital (18%)' : (isSg ? 'IRAS GST (9%)' : 'LHDN MyInvois (SST 8%)'),
+                            taxRate: isPk ? 0.18 : (isSg ? 0.09 : 0.08),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                }),
+
+                // 3. Technician Workspace
                 _portalCard(
                   title: "FIELD TECHNICIAN WORKSPACE",
-                  subtitle: "Ahmad Faizal (ST PW4) • Touch Sign-off & Offline Sync",
-                  badge: "ON-DEVICE ML",
-                  color: const Color(0xFFF59E0B),
+                  subtitle: "Active Dispatch Target � QR Scanner & Photo Docket",
+                  badge: "FIELD APP",
+                  badgeColor: const Color(0xFFF59E0B),
                   icon: Icons.engineering_rounded,
+                  iconBg: const Color(0xFF78350F),
                   onTap: () {
-                    onSelectSession(const UserSession(
-                      id: 'usr_tech_01',
-                      token: 'jwt_tech_token',
-                      name: 'Ahmad Faizal Bin Razali',
-                      email: 'faizal@alphatec.my',
-                      role: 'TECHNICIAN',
-                      tenantId: 'tenant_alphatec_01',
-                      companyName: 'AlphaTech Networks Sdn Bhd',
-                      planTier: 'ENTERPRISE SUITE',
-                      countryCode: 'MY',
-                      currencySymbol: 'RM',
-                      regulatoryBody: 'CIDB & ST (PW4)',
-                      taxEngine: 'LHDN MyInvois',
-                    ));
+                    final firstClient = clients.first;
+                    onSelectSession(
+                      UserSession(
+                        id: 'TECH-101',
+                        token: 'TECH-TOKEN-101',
+                        name: 'Ahmad Faizal (ST PW4)',
+                        email: 'ahmad.tech@fieldops.io',
+                        role: 'TECHNICIAN',
+                        tenantId: firstClient.tenantId,
+                        companyName: firstClient.companyName,
+                        planTier: firstClient.tier.name.toUpperCase(),
+                      ),
+                    );
                   },
                 ),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -260,30 +262,31 @@ class _RoleSelectionScreen extends StatelessWidget {
     required String title,
     required String subtitle,
     required String badge,
-    required Color color,
+    required Color badgeColor,
     required IconData icon,
+    required Color iconBg,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFF0B132B),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF1E293B)),
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
+                color: iconBg,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: color, size: 20),
+              child: Icon(icon, color: Colors.white, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -296,22 +299,20 @@ class _RoleSelectionScreen extends StatelessWidget {
                         child: Text(
                           title,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w900,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w900),
                         ),
                       ),
+                      const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.2),
+                          color: badgeColor.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: badgeColor.withValues(alpha: 0.5)),
                         ),
                         child: Text(
                           badge,
-                          style: TextStyle(color: color, fontSize: 7, fontWeight: FontWeight.w900),
+                          style: TextStyle(color: badgeColor, fontSize: 6.5, fontWeight: FontWeight.w900),
                         ),
                       ),
                     ],
@@ -320,7 +321,7 @@ class _RoleSelectionScreen extends StatelessWidget {
                   Text(
                     subtitle,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 8),
+                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 7.5),
                   ),
                 ],
               ),
@@ -331,7 +332,3 @@ class _RoleSelectionScreen extends StatelessWidget {
     );
   }
 }
-
-
-
-
