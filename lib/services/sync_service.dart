@@ -1,18 +1,152 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import '../modules/biometrics/biometrics_module.dart';
 
 class SyncService {
-  static const String endpoint = "https://api.alphatechnetworks.com/api/work-orders/submit";
+  static const String baseUrl = "https://api.alphatechnetworks.com";
+  static const String endpoint = "$baseUrl/api/work-orders/submit";
+  static const String attendanceEndpoint = "$baseUrl/api/attendance";
 
   static Future<bool> isOffline() async {
     final conn = await Connectivity().checkConnectivity();
     return conn.contains(ConnectivityResult.none);
   }
 
+  // ---------------------------------------------------------------------------
+  // ATTENDANCE: MOBILE PUSH (TECHNICIAN)
+  // ---------------------------------------------------------------------------
+  static Future<bool> submitAttendancePunch({
+    required AttendanceTelemetryRecord record,
+    File? facePhoto,
+  }) async {
+    if (await isOffline()) {
+      await _queueOfflineAttendance(record);
+      return false;
+    }
+
+    try {
+      final uri = Uri.parse('$attendanceEndpoint/check-in');
+      final req = http.MultipartRequest('POST', uri);
+
+      req.fields['id'] = record.id;
+      req.fields['technicianId'] = record.technicianId;
+      req.fields['technicianName'] = record.technicianName;
+      req.fields['type'] = record.type;
+      req.fields['category'] = record.category;
+      req.fields['locationName'] = record.locationName;
+      req.fields['latitude'] = record.latitude.toString();
+      req.fields['longitude'] = record.longitude.toString();
+      req.fields['timestamp'] = record.timestamp.toIso8601String();
+      req.fields['isOffSiteWarning'] = record.isOffSiteWarning.toString();
+
+      if (record.faceThumbnailBase64 != null && record.faceThumbnailBase64!.isNotEmpty) {
+        req.fields['faceThumbnailBase64'] = record.faceThumbnailBase64!;
+      }
+
+      File? fileToUpload = facePhoto;
+      if (fileToUpload == null && record.photoPath != null && record.photoPath!.isNotEmpty) {
+        final candidate = File(record.photoPath!);
+        if (candidate.existsSync()) fileToUpload = candidate;
+      }
+
+      if (fileToUpload != null && fileToUpload.existsSync()) {
+        req.files.add(await http.MultipartFile.fromPath('faceImage', fileToUpload.path));
+      }
+
+      final streamed = await req.send().timeout(const Duration(seconds: 15));
+      final res = await http.Response.fromStream(streamed);
+
+      return res.statusCode == 200 || res.statusCode == 201;
+    } catch (_) {
+      await _queueOfflineAttendance(record);
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ATTENDANCE: LAPTOP PULL (ADMIN PORTAL & RADAR)
+  // ---------------------------------------------------------------------------
+  static Future<List<AttendanceTelemetryRecord>> fetchAttendanceLogs() async {
+    try {
+      final res = await http
+          .get(Uri.parse(attendanceEndpoint))
+          .timeout(const Duration(seconds: 8));
+
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body);
+        final List<dynamic> list = (decoded is List) ? decoded : (decoded['data'] ?? []);
+
+        return list.map((item) {
+          final photo = item['photoPath']?.toString();
+          final base64 = item['faceThumbnailBase64']?.toString();
+          return AttendanceTelemetryRecord(
+            id: item['id']?.toString() ?? 'LOG-${DateTime.now().millisecondsSinceEpoch}',
+            technicianId: item['technicianId']?.toString() ?? 'TECH-001',
+            technicianName: item['technicianName']?.toString() ?? item['name'] ?? 'Technician',
+            type: item['type']?.toString() ?? 'CHECK_IN',
+            category: item['category']?.toString() ?? 'Project Site',
+            locationName: item['locationName']?.toString() ?? item['site'] ?? 'Field Site',
+            latitude: (item['latitude'] as num?)?.toDouble() ?? 3.1390,
+            longitude: (item['longitude'] as num?)?.toDouble() ?? 101.6869,
+            timestamp: DateTime.tryParse(item['timestamp']?.toString() ?? '') ?? DateTime.now(),
+            faceThumbnailBase64: (base64 != null && base64.isNotEmpty) ? base64 : null,
+            photoPath: (photo != null && photo.isNotEmpty) ? photo : null,
+            isOffSiteWarning: item['isOffSiteWarning'] == true || item['isOffSiteWarning'] == 1 || item['isOffSiteWarning'] == 'true',
+          );
+        }).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  // ---------------------------------------------------------------------------
+  // ATTENDANCE: OFFLINE QUEUE
+  // ---------------------------------------------------------------------------
+  static Future<void> _queueOfflineAttendance(AttendanceTelemetryRecord record) async {
+    final prefs = await SharedPreferences.getInstance();
+    final queue = prefs.getStringList('fieldops_attendance_queue') ?? [];
+    queue.add(jsonEncode(record.toJson()));
+    await prefs.setStringList('fieldops_attendance_queue', queue);
+  }
+
+  static Future<int> flushAttendanceQueue() async {
+    if (await isOffline()) return 0;
+    final prefs = await SharedPreferences.getInstance();
+    final queue = prefs.getStringList('fieldops_attendance_queue') ?? [];
+    if (queue.isEmpty) return 0;
+
+    final List<String> failed = [];
+    int successCount = 0;
+
+    for (final item in queue) {
+      try {
+        final res = await http.post(
+          Uri.parse('$attendanceEndpoint/check-in'),
+          headers: {'Content-Type': 'application/json'},
+          body: item,
+        ).timeout(const Duration(seconds: 10));
+
+        if (res.statusCode == 200 || res.statusCode == 201) {
+          successCount++;
+        } else {
+          failed.add(item);
+        }
+      } catch (_) {
+        failed.add(item);
+      }
+    }
+
+    await prefs.setStringList('fieldops_attendance_queue', failed);
+    return successCount;
+  }
+
+  // ---------------------------------------------------------------------------
+  // WORK ORDER SUBMISSIONS
+  // ---------------------------------------------------------------------------
   static Future<int> getQueueCount() async {
     final prefs = await SharedPreferences.getInstance();
     return (prefs.getStringList('fieldops_offline_queue') ?? []).length;
